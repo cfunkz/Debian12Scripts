@@ -1,53 +1,46 @@
 #!/bin/bash
-# Secure SSH Setup & Optional Password for User
 
-# Variables
-USERNAME="newuser"
-PUB_KEY="SSH PUB"
-SSH_PORT=22
+read -p "Enter the new username: " USERNAME
+read -p "Enter SSH port [default 22]: " SSH_PORT
+SSH_PORT=${SSH_PORT:-22}  # default to 22 if empty
+read -p "Enter the SSH public key: " PUB_KEY
+
 VOLUME_HOME="/home/$USERNAME"
 
-# Optional: set password via environment variable
-# PASSWD="mypassword"  # Uncomment to set password non-interactively
+read -s -p "Enter password for $USERNAME (leave blank for interactive prompt later): " PASSWD
+echo
 
-# 1️⃣ Create user and add to sudo
-if ! id -u $USERNAME >/dev/null 2>&1; then
-    # Create user with disabled password
-    adduser --disabled-password --gecos "" $USERNAME
-    usermod -aG sudo $USERNAME
+if ! id -u "$USERNAME" >/dev/null 2>&1; then
+    adduser --disabled-password --gecos "" "$USERNAME"
+    usermod -aG sudo "$USERNAME"
     echo "User $USERNAME created and added to sudo group."
 else
     echo "User $USERNAME already exists."
 fi
 
-# 2️⃣ Set password for the user
 if [ -z "$PASSWD" ]; then
-    echo "Please enter password for $USERNAME:"
-    passwd $USERNAME
+    echo "You will now be prompted to set a password for $USERNAME:"
+    passwd "$USERNAME"
 else
     echo "$USERNAME:$PASSWD" | chpasswd
-    echo "Password set for $USERNAME from PASSWD variable."
+    echo "Password set for $USERNAME from input."
 fi
 
-# 3️⃣ Install sudo if not present and update packages
 apt update && apt upgrade -y
 apt install -y sudo
 
-# 4️⃣ Setup SSH folder & authorized_keys
-mkdir -p $VOLUME_HOME/.ssh
-chmod 700 $VOLUME_HOME/.ssh
-echo "$PUB_KEY" > $VOLUME_HOME/.ssh/authorized_keys
-chmod 600 $VOLUME_HOME/.ssh/authorized_keys
-chown -R $USERNAME:$USERNAME $VOLUME_HOME/.ssh
+mkdir -p "$VOLUME_HOME/.ssh"
+chmod 700 "$VOLUME_HOME/.ssh"
+echo "$PUB_KEY" > "$VOLUME_HOME/.ssh/authorized_keys"
+chmod 600 "$VOLUME_HOME/.ssh/authorized_keys"
+chown -R "$USERNAME:$USERNAME" "$VOLUME_HOME/.ssh"
 echo "SSH authorized_keys set for $USERNAME."
 
-# 5️⃣ Backup existing sshd_config
 SSHD_CONF="/etc/ssh/sshd_config"
-cp $SSHD_CONF "${SSHD_CONF}.bak.$(date +%F-%T)"
+cp "$SSHD_CONF" "${SSHD_CONF}.bak.$(date +%F-%T)"
 echo "Backed up $SSHD_CONF to ${SSHD_CONF}.bak.$(date +%F-%T)"
 
-# 6️⃣ Harden SSH config
-cat > $SSHD_CONF <<EOF
+cat > "$SSHD_CONF" <<EOF
 # Basic settings
 Port $SSH_PORT
 AddressFamily any
@@ -84,7 +77,6 @@ EOF
 
 echo "sshd_config updated."
 
-# 7️⃣ Restart SSH service
 if systemctl status ssh >/dev/null 2>&1; then
     systemctl restart ssh
     echo "SSH service restarted."
